@@ -8,3 +8,4 @@ node_modules
 
 # Old local screenshots
 preview/
+.env*

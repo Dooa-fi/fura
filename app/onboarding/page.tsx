@@ -292,6 +292,14 @@ type Item = { key: string; file: File; progress: number; status: "waiting" | "up
 
 const MAX_MB = 50;
 
+// Some browsers give .mov / .mkv / .m4a files no type at all, so fall back to the file extension.
+const BY_EXTENSION: Record<string, string> = {
+  mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", wav: "audio/wav", ogg: "audio/ogg", opus: "audio/ogg", flac: "audio/flac", amr: "audio/amr",
+  mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm", mkv: "video/x-matroska", avi: "video/x-msvideo", "3gp": "video/3gpp",
+};
+const mediaType = (file: File) =>
+  /^(audio|video)\//.test(file.type) ? file.type : BY_EXTENSION[file.name.split(".").pop()?.toLowerCase() || ""] || "";
+
 function UploadClips({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   const [items, setItems] = useState<Item[]>([]);
   const [already, setAlready] = useState(0); // clips uploaded in an earlier visit
@@ -309,7 +317,9 @@ function UploadClips({ onBack, onNext }: { onBack: () => void; onNext: () => voi
   function addFiles(files: FileList | null) {
     if (!files) return;
     const added = Array.from(files).map((file): Item => {
-      const bad = !/^(audio|video)\//.test(file.type) ? "Not an audio or video file" : file.size > MAX_MB * 1024 * 1024 ? `Bigger than ${MAX_MB} MB` : undefined;
+      const bad = !mediaType(file) ? "Not an audio or video file"
+        : file.size === 0 ? "This file is empty"
+        : file.size > MAX_MB * 1024 * 1024 ? `Bigger than ${MAX_MB} MB` : undefined;
       return { key: `${file.name}-${file.size}-${Math.random()}`, file, progress: 0, status: bad ? "error" : "waiting", error: bad };
     });
     setItems((list) => [...list, ...added]);
@@ -321,7 +331,7 @@ function UploadClips({ onBack, onNext }: { onBack: () => void; onNext: () => voi
       try {
         update(item.key, { status: "uploading" });
         // 1. ask our server for a one-time upload link
-        const { clipId, uploadUrl } = await api("/api/clips", { fileName: item.file.name, fileType: item.file.type, fileSize: item.file.size });
+        const { clipId, uploadUrl } = await api("/api/clips", { fileName: item.file.name, fileType: mediaType(item.file), fileSize: item.file.size });
         // 2. send the file straight to storage, showing real progress
         await putFile(uploadUrl, item.file, (progress) => update(item.key, { progress }));
         // 3. tell our server it's there so transcription can start
@@ -402,7 +412,7 @@ function putFile(url: string, file: File, onProgress: (pct: number) => void) {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", file.type);
+    xhr.setRequestHeader("Content-Type", mediaType(file));
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
     xhr.onerror = () => reject(new Error("Network error while uploading"));

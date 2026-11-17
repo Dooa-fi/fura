@@ -39,7 +39,8 @@ create table if not exists usage (
   id      uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
   month   text not null,          -- e.g. '2026-11'
-  count   int  not null default 0
+  count   int  not null default 0,
+  unique (user_id, month)         -- one row per person per month
 );
 
 -- 5. Every uploaded clip. status: uploading → transcribing → done | failed

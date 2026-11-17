@@ -11,7 +11,7 @@ import { checkTranscription } from "@/lib/transcribe";
 import { askAI, readJSON } from "@/lib/ai";
 import { DNA_SYSTEM, dnaUserPrompt } from "@/lib/prompts";
 
-export const maxDuration = 60; // the AI step can take ~20-40 seconds
+export const maxDuration = 300; // the AI step takes ~20-40 seconds, more if a backup model is needed
 
 export const POST = handler(async (creator, req) => {
   const { rebuild } = await req.json().catch(() => ({}));
@@ -28,13 +28,15 @@ export const POST = handler(async (creator, req) => {
 
   for (const clip of clips.filter((c) => c.status === "transcribing" && c.assembly_job_id)) {
     const job = await checkTranscription(clip.assembly_job_id);
-    if (job.status === "completed" && job.text.trim()) {
+    if (job.status === "completed" && job.text.trim()) clip.status = "done";
+    else if (job.status === "completed" || job.status === "error") clip.status = "failed"; // no speech, or AssemblyAI couldn't read the file
+    if (clip.status === "transcribing") continue;
+
+    // Only the request that changes the status saves the text (two tabs polling at once won't save it twice).
+    const changed = await db().from("videos").update({ status: clip.status }).eq("id", clip.id).eq("status", "transcribing").select("id");
+    if (changed.data?.length && clip.status === "done") {
       await db().from("transcripts").insert({ video_id: clip.id, user_id: creator.id, raw_text: job.text.trim() });
-      clip.status = "done";
-    } else if (job.status === "completed" || job.status === "error") {
-      clip.status = "failed"; // finished but no speech, or AssemblyAI couldn't read the file
     }
-    if (clip.status !== "transcribing") await db().from("videos").update({ status: clip.status }).eq("id", clip.id);
   }
 
   const progress = clips.map((c) => ({ id: c.id, name: c.filename, status: c.status }));

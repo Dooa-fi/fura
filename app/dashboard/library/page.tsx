@@ -29,8 +29,12 @@ export default function LibraryPage() {
 
   async function remove(id: string) {
     if (!confirm("Delete this from your Library? This can't be undone.")) return;
-    await api(`/api/creations?id=${id}`, undefined, "DELETE").catch((e) => setError(e.message));
-    setItems((list) => list?.filter((x) => x.id !== id) || null);
+    try {
+      await api(`/api/creations?id=${encodeURIComponent(id)}`, undefined, "DELETE");
+      setItems((list) => list?.filter((x) => x.id !== id) || null);
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
 
   return (

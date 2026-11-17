@@ -71,7 +71,7 @@ export async function getCreator(clerkId: string): Promise<Creator> {
   const one = (x: any) => (Array.isArray(x) ? x[0] : x) ?? null;
   const niche = { data: one(user.niche_profiles) };
   const style = { data: one(user.style_profiles) };
-  const usage = { data: one(user.usage) };
+  const usage = (user.usage || []) as { count: number }[]; // this month's row (or none yet)
 
   // style_profiles.profile_json looks like { status: "ready", dna: {...} }
   const voice = style.data?.profile_json || {};
@@ -84,7 +84,7 @@ export async function getCreator(clerkId: string): Promise<Creator> {
     goals: niche.data?.engagement_metrics ?? null,
     dna: voice.dna ?? null,
     dna_status: voice.status ?? "none",
-    credits_used: usage.data?.count ?? 0,
+    credits_used: usage.reduce((sum, row) => sum + row.count, 0),
   };
 }
 
@@ -125,13 +125,31 @@ export function creditsLeft(creator: Creator) {
   return MONTHLY_CREDITS - creator.credits_used;
 }
 
-// Take credits away after a successful generation. A new month gets a new row, so credits reset by themselves.
-// shortcut: read-then-write, two generations at the exact same moment could both pass; fine for one user, use a SQL function if this goes big.
-export async function spendCredits(creator: Creator, cost: number) {
-  const row = await db().from("usage").select("id").eq("user_id", creator.id).eq("month", thisMonth()).maybeSingle();
-  if (row.data) {
-    await db().from("usage").update({ count: creator.credits_used + cost }).eq("id", row.data.id);
-  } else {
-    await db().from("usage").insert({ user_id: creator.id, month: thisMonth(), count: cost });
+// Credits live in ONE usage row per person per month (the database allows only one), so a new month starts at 0.
+// Take credits BEFORE the AI writes, and give them back if writing fails.
+// Safe when several requests come at once: the row is only updated if its count is still what we read
+// ("compare and swap"). If another request changed it first, we read again and retry.
+async function changeCredits(creator: Creator, delta: number) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { data: row } = await db().from("usage").select("id, count").eq("user_id", creator.id).eq("month", thisMonth()).maybeSingle();
+    const used = (row?.count ?? 0) + delta;
+    if (delta > 0 && used > MONTHLY_CREDITS) return null; // not enough credits
+
+    const result = row
+      ? await db().from("usage").update({ count: Math.max(0, used) }).eq("id", row.id).eq("count", row.count).select("id")
+      : await db().from("usage").insert({ user_id: creator.id, month: thisMonth(), count: Math.max(0, used) }).select("id");
+    if (result.data?.length) return Math.max(0, used); // our change went in
+    // someone else changed the row first (or created it): try again with the new number
   }
+  throw new Error("Too many requests at once. Try again in a moment.");
+}
+
+// Returns how many credits are left after charging, or null if there aren't enough.
+export async function chargeCredits(creator: Creator, cost: number) {
+  const used = await changeCredits(creator, cost);
+  return used === null ? null : { left: MONTHLY_CREDITS - used };
+}
+
+export async function refundCredits(creator: Creator, cost: number) {
+  await changeCredits(creator, -cost);
 }

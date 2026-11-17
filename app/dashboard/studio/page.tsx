@@ -25,7 +25,8 @@ export default function StudioPage() {
 
 function Studio() {
   const params = useSearchParams();
-  const [kind, setKind] = useState<Kind>((params.get("kind") as Kind) || "script");
+  const fromLink = params.get("kind");
+  const [kind, setKind] = useState<Kind>(KINDS.some((k) => k.id === fromLink) ? (fromLink as Kind) : "script");
   const [topic, setTopic] = useState(params.get("topic") || "");
   const [length, setLength] = useState<"short" | "long">("short");
   const [research, setResearch] = useState(false);
@@ -42,6 +43,7 @@ function Studio() {
   }, []);
 
   const current = KINDS.find((k) => k.id === kind)!;
+  const outOfCredits = credits !== null && credits < current.cost;
 
   async function write(e: React.FormEvent) {
     e.preventDefault();
@@ -119,12 +121,14 @@ function Studio() {
             </fieldset>
           )}
 
-          <button className="btn-primary w-full mt-6" disabled={loading || !topic.trim()}>
+          <button className="btn-primary w-full mt-6" disabled={loading || !topic.trim() || outOfCredits}>
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             {loading ? "Writing…" : `Write ${current.label.toLowerCase()}`}
           </button>
           <p className="mt-2 text-center text-xs text-muted">
-            Uses {current.cost} credit{current.cost > 1 ? "s" : ""}{credits !== null && ` · ${credits} left this month`}
+            {outOfCredits
+              ? `Not enough credits left (${credits}). You get 100 new credits on the 1st.`
+              : <>Uses {current.cost} credit{current.cost > 1 ? "s" : ""}{credits !== null && ` · ${credits} left this month`}</>}
           </p>
         </form>
 

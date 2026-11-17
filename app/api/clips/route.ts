@@ -24,6 +24,7 @@ export const POST = handler(async (creator, req) => {
 
   // Check the file BEFORE handing out an upload link. (The storage bucket enforces the same rules again.)
   if (!/^(audio|video)\//.test(String(fileType))) return fail("Only audio or video files can be used.");
+  if (!(Number(fileSize) > 0)) return fail("This file is empty.");
   if (Number(fileSize) > MAX_MB * 1024 * 1024) return fail(`Each file must be under ${MAX_MB} MB.`);
 
   const existing = await db().from("videos").select("id", { count: "exact", head: true }).eq("user_id", creator.id);

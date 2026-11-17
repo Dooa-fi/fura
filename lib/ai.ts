@@ -46,8 +46,8 @@ async function askModel(model: string, key: string, system: string, user: string
       // Ask the model to reply with pure JSON when we need structured data.
       ...(options.json ? { response_format: { type: "json_object" } } : {}),
     }),
-    // Give up on a slow model after 90 seconds (the next one gets its turn).
-    signal: AbortSignal.timeout(90_000),
+    // Give up on a slow model after 60 seconds, so all backups fit in the 300-second function limit.
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!res.ok) {
