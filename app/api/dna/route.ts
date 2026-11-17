@@ -8,7 +8,7 @@
 import { db, saveVoice, claimVoiceBuild } from "@/lib/db";
 import { handler } from "@/lib/route";
 import { checkTranscription } from "@/lib/transcribe";
-import { askAI, readJSON } from "@/lib/ai";
+import { askChecked, checkDNA } from "@/lib/outputs";
 import { DNA_SYSTEM, dnaUserPrompt } from "@/lib/prompts";
 
 export const maxDuration = 300; // the AI step takes ~20-40 seconds, more if a backup model is needed
@@ -61,8 +61,8 @@ export const POST = handler(async (creator, req) => {
       .map((c) => ({ name: c.filename, text: texts?.find((t) => t.video_id === c.id)?.raw_text || "" }))
       .filter((t) => t.text);
 
-    const answer = await askAI(DNA_SYSTEM, dnaUserPrompt(creator, transcripts), { json: true });
-    await saveVoice(creator.id, "ready", readJSON(answer));
+    const dna = await askChecked(DNA_SYSTEM, dnaUserPrompt(creator, transcripts), checkDNA);
+    await saveVoice(creator.id, "ready", dna);
     status = "ready";
   } catch (err) {
     await saveVoice(creator.id, "failed", creator.dna);

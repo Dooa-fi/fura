@@ -1,9 +1,10 @@
 // POST /api/generate: writes a script, hooks, or video ideas in the creator's style.
-// Body: { kind: "script" | "hooks" | "ideas", topic, length?, angle?, research? }
+// Body: { kind: "script" | "hooks" | "ideas", topic, length?, angle?, research?, hook? }
+// The AI answers in JSON; lib/outputs.ts checks it (and asks again once if it is broken).
 
 import { db, creditsLeft, chargeCredits, refundCredits } from "@/lib/db";
 import { handler, fail } from "@/lib/route";
-import { askAI } from "@/lib/ai";
+import { askChecked, checkScript, checkHooks, checkIdeas, toMarkdown, spokenLength, Refused, Script, Output } from "@/lib/outputs";
 import { searchWeb, Source } from "@/lib/research";
 import { scriptPrompt, hooksPrompt, ideasPrompt } from "@/lib/prompts";
 
@@ -33,14 +34,15 @@ export const POST = handler(async (creator, req) => {
     if (kind === "script" && body.research) sources = await searchWeb(topic);
 
     // ---- 3. Pick the right instructions and ask the AI ----
-    const system =
+    const hook = String(body.hook || "").trim().slice(0, 200); // a hook the creator picked to start the script with
+    const user = kind === "ideas" ? `Theme: ${topic}` : `Video topic: ${topic}`;
+    const data: Output =
       kind === "script"
-        ? scriptPrompt(creator.dna, creator, body.length === "long" ? "long" : "short", sources)
+        ? await askChecked(scriptPrompt(creator.dna, creator, body.length === "long" ? "long" : "short", sources, hook), user, checkScript)
         : kind === "hooks"
-          ? hooksPrompt(creator.dna, creator, String(body.angle || "curiosity").slice(0, 40))
-          : ideasPrompt(creator.dna, creator);
-
-    const output = await askAI(system, kind === "ideas" ? `Theme: ${topic}` : `Video topic: ${topic}`);
+          ? await askChecked(hooksPrompt(creator.dna, creator, String(body.angle || "curiosity").slice(0, 40)), user, checkHooks)
+          : await askChecked(ideasPrompt(creator.dna, creator), user, checkIdeas);
+    const output = toMarkdown(kind, data);
 
     // ---- 4. Save it to the Library ----
     // Research links are added to the end of the script, so they're kept in the Library too.
@@ -55,9 +57,16 @@ export const POST = handler(async (creator, req) => {
       .single();
     if (saved.error) throw new Error(saved.error.message);
 
-    return Response.json({ creation: { id: saved.data.id, output: content }, creditsLeft: charge.left });
+    return Response.json({
+      creation: { id: saved.data.id, output: content },
+      data, // the checked JSON, so the Studio can show cards and sections
+      length: kind === "script" ? spokenLength(data as Script) : null,
+      sources: sources.map((s) => ({ title: s.title, url: s.url })),
+      creditsLeft: charge.left,
+    });
   } catch (err) {
     await refundCredits(creator, COST[kind]); // nothing was written, so give the credits back
+    if (err instanceof Refused) return fail(err.message, 422);
     throw err;
   }
 });

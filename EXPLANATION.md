@@ -116,6 +116,7 @@ fura/
 │   ├── transcribe.ts             ← talk to AssemblyAI
 │   ├── research.ts               ← talk to Exa
 │   ├── prompts.ts                ← EVERY instruction given to the AI
+│   ├── outputs.ts                ← checks and cleans what the AI sends back
 │   ├── client.ts                 ← browser helper to call our API
 │   └── labels.ts                 ← small display helpers
 ├── components/                   ← reusable UI pieces (logo, copy button, markdown)
@@ -160,10 +161,13 @@ When no clip is still being worked on and at least one is `done`:
 
 ### Step 6 — Writing (`app/api/generate/route.ts`)
 The route follows four numbered steps (they are numbered in the code too):
-1. **Check** the request: valid kind, topic present, voice ready, enough credits.
+1. **Check** the request: valid kind, topic present, voice ready, enough credits. Then **take the credits** right away (`chargeCredits` in `lib/db.ts`), so several requests at once can't go over 100. If anything below fails, the credits are given back.
 2. **Research** (scripts only, optional): search the web with Exa.
-3. **Ask the AI**: pick `scriptPrompt`, `hooksPrompt` or `ideasPrompt` from `lib/prompts.ts`.
-4. **Save** to the `generations` table (research links are added at the end) and **spend credits**.
+3. **Ask the AI**: pick `scriptPrompt`, `hooksPrompt` or `ideasPrompt` from `lib/prompts.ts`. The AI must reply in JSON.
+   `lib/outputs.ts` checks that JSON (a script needs a Hook and an Outro, hooks need 7 different lines, ideas need 10),
+   cleans the text (no em dashes, no stray quotes) and, if the answer is broken, asks the AI once more with the exact problem.
+   If the topic is unsafe, the AI answers `{"refused": "..."}` and the person sees that friendly message instead.
+4. **Save** to the `generations` table as Markdown (`toMarkdown`), so the Library can show it. The Studio gets the JSON too, and shows hooks and ideas as cards and the script section by section.
 
 ### Step 7 — Why it sounds like you (`voiceCard()` in `lib/prompts.ts`)
 Every writing prompt begins with a "voice card" built from the Creator DNA:
@@ -234,7 +238,7 @@ The database tables already exist in the Supabase project. For a brand-new proje
 
 Steps: push the code to GitHub → on vercel.com click **Add New → Project** → pick the repo → paste the environment variables from `.env.local` → **Deploy**. Then in Clerk, add the Vercel address (or fura.dev) to the allowed domains.
 
-To change the AI, set `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in `.env.local` (examples are in `.env.example`). `AI_MODEL` can list backup models separated by commas: if one fails or takes over 90 seconds, `lib/ai.ts` tries the next.
+To change the AI, set `AI_BASE_URL`, `AI_API_KEY` and `AI_MODEL` in `.env.local` (examples are in `.env.example`). `AI_MODEL` can list backup models separated by commas: if one fails or takes over 60 seconds, `lib/ai.ts` tries the next.
 
 ---
 

@@ -1,15 +1,12 @@
 "use client";
 // app/dashboard/studio/page.tsx: where you write. Pick Script, Hooks or Ideas, type a topic, press Write.
 // It sends one request to POST /api/generate and shows the answer.
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, X } from "lucide-react";
 import { api } from "@/lib/client";
-import { Markdown } from "@/components/markdown";
-import { CopyButton } from "@/components/copy-button";
-
-type Kind = "script" | "hooks" | "ideas";
+import { Writing, ScriptView, HooksView, IdeasView, Kind, Result } from "./results";
 
 const KINDS: { id: Kind; label: string; cost: number; placeholder: string; prompt: string }[] = [
   { id: "script", label: "Script", cost: 2, prompt: "What's the video about?", placeholder: "e.g. 3 mistakes I made in my first year of lifting" },
@@ -34,7 +31,18 @@ function Studio() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<{ output: string } | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
+  const [hook, setHook] = useState(""); // a hook picked from the Hooks results, to start the script with
+  const topicRef = useRef<HTMLTextAreaElement>(null);
+
+  // From a hook or idea card: switch to that kind, keep or fill the topic, and bring the form into view.
+  function pick(nextKind: Kind, nextTopic: string, nextHook = "") {
+    setKind(nextKind);
+    setTopic(nextTopic);
+    setHook(nextHook);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    topicRef.current?.focus({ preventScroll: true });
+  }
 
   const [credits, setCredits] = useState<number | null>(null);
   const [canResearch, setCanResearch] = useState(false);
@@ -51,8 +59,8 @@ function Studio() {
     setError("");
     setResult(null);
     try {
-      const res = await api("/api/generate", { kind, topic, length, research: canResearch && research, angle });
-      setResult(res.creation);
+      const res = await api("/api/generate", { kind, topic, length, research: canResearch && research, angle, hook: kind === "script" ? hook : "" });
+      setResult({ kind, output: res.creation.output, data: res.data, length: res.length, sources: res.sources || [] });
       setCredits(res.creditsLeft);
     } catch (err: any) {
       setError(err.message);
@@ -78,8 +86,15 @@ function Studio() {
           </div>
 
           <label htmlFor="topic" className="label mt-6">{current.prompt}</label>
-          <textarea id="topic" rows={4} className="field resize-none" placeholder={current.placeholder}
+          <textarea id="topic" ref={topicRef} rows={4} className="field resize-none" placeholder={current.placeholder}
             value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={500} />
+
+          {kind === "script" && hook && (
+            <div className="mt-4 rounded-xl border-l-4 border-mark bg-soft px-3 py-2.5 flex items-start gap-2">
+              <p className="flex-1 text-sm"><span className="block text-xs text-muted">Starts with your hook</span>{hook}</p>
+              <button type="button" onClick={() => setHook("")} aria-label="Don't use this hook" className="p-1 rounded-full text-muted hover:text-ink"><X className="w-4 h-4" /></button>
+            </div>
+          )}
 
           {kind === "script" && (
             <>
@@ -144,7 +159,7 @@ function Studio() {
             </div>
           )}
 
-          {loading && <Writing research={kind === "script" && research} />}
+          {loading && <Writing kind={kind} research={kind === "script" && canResearch && research} />}
 
           {!loading && !error && !result && (
             <div className="h-full grid place-items-center text-center py-16">
@@ -155,28 +170,11 @@ function Studio() {
             </div>
           )}
 
-          {result && (
-            <>
-              <div className="flex justify-end -mt-2 mb-2"><CopyButton text={result.output} /></div>
-              <Markdown text={result.output} />
-            </>
-          )}
+          {!loading && result?.kind === "script" && <ScriptView result={result} />}
+          {!loading && result?.kind === "hooks" && <HooksView result={result} onUseHook={(h) => pick("script", topic, h)} />}
+          {!loading && result?.kind === "ideas" && <IdeasView result={result} onPick={(k, t) => pick(k, t)} />}
         </section>
       </div>
-    </div>
-  );
-}
-
-function Writing({ research }: { research: boolean }) {
-  return (
-    <div className="space-y-4" aria-label="Writing">
-      <p className="text-muted flex items-center gap-2">
-        <span className="w-2.5 h-2.5 rounded-full bg-coral animate-pulse" />
-        {research ? "Researching the web, then writing in your style…" : "Writing in your style…"}
-      </p>
-      {[90, 75, 82, 60, 70].map((w, i) => (
-        <div key={i} className="h-3 rounded-full bg-line animate-pulse" style={{ width: `${w}%` }} />
-      ))}
     </div>
   );
 }
