@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Fura colour tokens (light) ---- */
+:root {
+  --paper: 245 246 248;       /* page background (cool off-white) */
+  --surface: 255 255 255;     /* cards / panels */
+  --ink: 14 17 22;            /* main text */
+  --muted: 96 102 112;        /* secondary text */
+  --line: 226 228 232;        /* borders */
+  --soft: 236 237 240;        /* hover / selected background */
+  --accent: 14 17 22;         /* buttons + links: solid black */
+  --accent-fg: 255 255 255;   /* text on buttons */
+  --mark: 255 221 51;         /* highlighter yellow: catchphrases, tags */
+  --mark-ink: 20 20 20;       /* text on the highlighter */
+  --coral: 229 57 53;         /* red "recording" dot / errors */
+  --mint: 22 150 100;         /* success */
+  color-scheme: light;
+}
+
+/* ---- Same tokens for dark mode (follows the OS setting) ---- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: 15 17 21;
+    --surface: 24 27 33;
+    --ink: 240 241 243;
+    --muted: 150 156 166;
+    --line: 42 46 54;
+    --soft: 34 38 46;
+    --accent: 244 245 247;
+    --accent-fg: 14 17 22;
+    --mark: 255 221 51;
+    --mark-ink: 20 20 20;
+    --coral: 255 92 87;
+    --mint: 63 200 140;
+    color-scheme: dark;
+  }
+}
+
+body {
+  background: rgb(var(--paper));
+  color: rgb(var(--ink));
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Keyboard focus is always visible */
+:focus-visible {
+  outline: 2px solid rgb(var(--ink));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* The Fura "F" mark, drawn in the current text colour */
+.logo-mark {
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask: url("/logo.png") center / contain no-repeat;
+  mask: url("/logo.png") center / contain no-repeat;
+}
+
+/* Reusable bits so the JSX stays short */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 h-11 text-[15px] font-semibold transition
+      disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply btn bg-accent text-accent-fg hover:opacity-85 active:scale-[.98]; }
+  .btn-ghost { @apply btn border border-line bg-surface hover:border-ink/30; }
+  .field {
+    @apply w-full rounded-xl border border-line bg-surface px-4 py-3 text-[15px] placeholder:text-muted/70
+      focus:border-ink focus:outline-none focus:ring-4 focus:ring-ink/10 transition;
+  }
+  .label { @apply block text-sm font-semibold mb-2; }
+  .panel { @apply rounded-2xl border border-line bg-surface; }
+}
+
+/* Markdown output (scripts, hooks, ideas) */
+.prose-fura { line-height: 1.7; font-size: 16px; }
+.prose-fura h1, .prose-fura h2, .prose-fura h3 { font-weight: 700; margin: 1.4em 0 .5em; line-height: 1.25; }
+.prose-fura h1 { font-size: 1.5rem; } .prose-fura h2 { font-size: 1.25rem; } .prose-fura h3 { font-size: 1.1rem; }
+.prose-fura p { margin: .8em 0; }
+.prose-fura ul, .prose-fura ol { margin: .8em 0; padding-left: 1.4em; }
+.prose-fura ul { list-style: disc; } .prose-fura ol { list-style: decimal; }
+.prose-fura li { margin: .35em 0; }
+.prose-fura strong { font-weight: 700; }
+.prose-fura em { color: rgb(var(--muted)); }
+.prose-fura blockquote { border-left: 3px solid rgb(var(--mark)); padding-left: 1em; color: rgb(var(--muted)); }
+.prose-fura a { color: rgb(var(--ink)); text-decoration: underline; text-decoration-color: rgb(var(--mark)); text-decoration-thickness: 3px; }
+.prose-fura hr { border-color: rgb(var(--line)); margin: 1.5em 0; }
+
+/* Shiki code blocks on the How-it-works page */
+.code-block pre { padding: 20px; overflow-x: auto; font-size: 13px; line-height: 1.65; border-radius: 0; background: transparent !important; }
+@media (prefers-color-scheme: dark) {
+  .code-block .shiki, .code-block .shiki span { color: var(--shiki-dark) !important; }
+}
+
+/* Waveform bars on the landing page */
+@keyframes wave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+.wave-bar { animation: wave 1.6s ease-in-out infinite; transform-origin: center; }
+@media (prefers-reduced-motion: reduce) { .wave-bar { animation: none; } }
+
+/* How-it-works file map: the lit-up links "flow", and the file details slide in. */
+.flow-active { stroke-dasharray: 7 6; animation: flow 0.7s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -13; } }
+.step-in { animation: step-in 0.35s cubic-bezier(.2, .8, .2, 1); }
+@keyframes step-in { from { opacity: 0; transform: translateY(8px); } }
+.graph-edge { transition: opacity 0.2s, stroke 0.2s; }
+@media (prefers-reduced-motion: reduce) { .flow-active, .step-in { animation: none; } }
